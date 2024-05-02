@@ -1,0 +1,234 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(stringr)
+library(tidyverse)
+library(tm)
+library(NLP)
+library(openxlsx)
+```
+
+---
+Part 1: News from Nexis Uni
+---
+
+```{r}
+GeneA2 <- vector(mode = "list", length = length(GeneA))
+
+for(i in 1:length(GeneA)){
+  end <- max(which(str_detect(GeneA[[i]], "Narrowed by")))+2
+  GeneA2[[i]] <- GeneA[[i]][-(1:end)]
+}
+
+#length = number of all articles
+
+n <- length(GeneA)*10
+
+GeneA3 <- vector(mode = "list", length = n)
+start <- which(str_detect(unlist(GeneA2), "End of Document")) + 1
+start <- c(1, start)
+
+for(i in 1:n){
+  GeneA3[[i]]<- unlist(GeneA2)[start[i]:(start[i+1] - 1)]
+}
+
+```
+
+
+
+```{r}
+GeneA_news=data.frame()
+
+for(i in 1:length(GeneA3))
+  {try(
+    {
+ date <- if(GeneA3[[i]][2] == "Newstex Blogs") {GeneA3[[i]][4]} else {GeneA3[[i]][3]}
+ outlet <- GeneA3[[i]][2]
+ length <- GeneA3[[i]][which(str_detect(GeneA3[[i]], "Length:"))]
+ language <- GeneA3[[i]][which(str_detect(GeneA3[[i]], "Language:"))]
+ pubtype <- GeneA3[[i]][which(str_detect(GeneA3[[i]], "Publication-Type:"))]
+ title <- GeneA3[[i]][1]
+ temp <- GeneA3[[i]][(which(GeneA3[[i]] == "Body") +1):(which(GeneA3[[i]] == "Classification") - 1)]
+ article <- paste(temp, collapse = " ")
+ #-----if character(0), replace it NA-----#
+ length[length(length) == 0] <- NA_character_
+ language[length(language) == 0] <- NA_character_
+ pubtype[length(pubtype) == 0] <- NA_character_
+ #-----Append as data frame-----#
+ append <- c(date,outlet,length,language,pubtype,title,article)
+ GeneA_news=rbind(GeneA_news, append)
+ message("done", i)
+ }
+ , silent=TRUE)
+}
+
+names(GeneA_news)=c("date","outlet","length","language","pubtype","title","article")
+GeneA_news <- GeneA_news %>%
+  rownames_to_column("id")
+
+GeneA_news$length <- str_sub(word(GeneA_news$length,1), 9, 12)
+GeneA_news$length <- str_trim(GeneA_news$length)
+GeneA_news$language <- str_sub(GeneA_news$language, 11)
+GeneA_news$pubtype <- str_sub(GeneA_news$pubtype, 19)
+
+GeneA_news$month <- word(GeneA_news$date, 1)
+GeneA_news$day <- word(GeneA_news$date, 2)
+GeneA_news$day <- str_replace(GeneA_news$day, ",","")
+GeneA_news$year <- word(GeneA_news$date, 3)
+
+GeneA_news <- GeneA_news[, c(1,9,10,11,3,4,5,6,7,8)]
+
+#GeneA_news <- GeneA_news %>%
+#  filter(!str_detect(language, "Spanish"))
+
+#GeneA_news <- GeneA_news %>%
+#  filter(!str_detect(language, "SPANISH"))
+
+save(GeneA_news, file = "C:\\Users\\Ahn Suhwoo\\Desktop\\Gene\\Read text\\Gene_all2.rda")
+
+write.csv(GeneA_news, file = "GeneB2_news.csv")
+write.xlsx(GeneA_news, file = "GeneB2_news.xlsx")
+
+```
+
+---
+Part 2: News from ProQuest
+---
+
+```{r}
+GeneB2 <- vector(mode = "list", length = length(GeneB))
+for(i in 1:length(GeneB)){
+  end <- which(str_detect(GeneB[[i]], "Terms and Conditions: https://www.proquest.com/info/termsAndConditions"))
+  GeneB2[[i]] <- GeneB[[i]][-((end-3):end)]
+}
+
+n <- length(GeneB)*100
+
+GeneB3 <- vector(mode = "list", length = n)
+start <- which(str_detect(unlist(GeneB2),"____________________________"))
+start <- c(start, 531209)
+for(i in 1:n){
+  GeneB3[[i]]<- unlist(GeneB2)[start[i]:(start[i+1] - 1)]
+}
+
+```
+
+
+
+```{r}
+GeneB_news=data.frame()
+
+for(i in 1:length(GeneB3))
+  {try(
+    {
+ date <- str_subset(GeneB3[[i]], "Publication date:")
+ outlet <- str_subset(GeneB3[[i]], "Publication title: ")
+ length <- "NA"
+ language <- "NA"
+ pubtype <- str_subset(GeneB3[[i]], "Source type:")
+ title <- str_subset(GeneB3[[i]], "Title: ")
+ #----- article -----#
+ temp <- GeneB3[[i]][(which(str_detect(GeneB3[[i]], "Full text:"))):(which(str_detect(GeneB3[[i]], "Title: ")) - 1)]
+  temp2 <- str_remove(temp, "(Credit:).+")
+  temp3 <- str_remove(temp2, "(Subject:).+")
+  temp4 <- str_remove(temp3, "(Location:).+")
+  temp5 <- str_remove(temp4, "(Company / organization:).+")
+  temp6 <- str_remove(temp5, "(People:).+")
+  article <- paste(temp6, collapse = " \n ")
+ #-----Append as data frame-----#
+ append <- c(date,outlet,length,language,pubtype,title,article)
+ GeneB_news=rbind(GeneB_news, append)
+ message("done", i)
+ }
+ , silent=TRUE)
+}
+
+names(GeneB_news)=c("date","outlet","length","language","pubtype","title","article")
+GeneB_news <- GeneB_news %>%
+  rownames_to_column("id")
+
+GeneB_news$outlet <- str_replace(GeneB_news$outlet, "Publication title: ", "")
+GeneB_news$title <- str_replace(GeneB_news$title, "Title: ", "")
+GeneB_news$pubtype <- str_replace(GeneB_news$pubtype, "Source type: ", "")
+GeneB_news$article <- str_replace(GeneB_news$article, "Full text: ", "")
+
+GeneB_news$outlet <- str_replace(GeneB_news$outlet, ";.*", "")
+#GeneB_news$outlet <- str_replace(GeneB_news$outlet, "(Online)", "")
+#GeneB_news$outlet <- str_replace(GeneB_news$outlet, " ()", "")
+
+GeneB_news$month <- word(GeneB_news$date, 3)
+GeneB_news$day <- word(GeneB_news$date, 4)
+GeneB_news$day <- str_replace(GeneB_news$day, ",","")
+GeneB_news$year <- word(GeneB_news$date, 5)
+
+GeneB_news$month <- str_replace(GeneB_news$month, "Jan", "January")
+GeneB_news$month <- str_replace(GeneB_news$month, "Feb", "February")
+GeneB_news$month <- str_replace(GeneB_news$month, "Mar", "March")
+GeneB_news$month <- str_replace(GeneB_news$month, "Apr", "April")
+GeneB_news$month <- str_replace(GeneB_news$month, "Jun", "June")
+GeneB_news$month <- str_replace(GeneB_news$month, "Jul", "July")
+GeneB_news$month <- str_replace(GeneB_news$month, "Aug", "August")
+GeneB_news$month <- str_replace(GeneB_news$month, "Sep", "September")
+GeneB_news$month <- str_replace(GeneB_news$month, "Oct", "October")
+GeneB_news$month <- str_replace(GeneB_news$month, "Nov", "November")
+GeneB_news$month <- str_replace(GeneB_news$month, "Dec", "December")
+
+GeneB_news <- GeneB_news[, c(1,9,10,11,3,4,5,6,7,8)]
+
+#GeneA_news <- GeneA_news %>%
+#  filter(!str_detect(language, "Spanish"))
+
+save(GeneB_news, file = "C:\\Users\\Ahn Suhwoo\\Desktop\\Gene\\Read text\\Gene_all3.rda")
+
+write.csv(GeneA_news, file = "GeneB2_news.csv")
+write.xlsx(GeneA_news, file = "GeneB2_news.xlsx")
+
+```
+
+---
+Part 3: Combine data
+---
+
+```{r}
+object1 <- load("Gene_all1_1.rda")
+Gene_all1_1 <- GeneA_news
+rm(GeneA_news)
+
+object2 <- load("Gene_all1_2.rda")
+Gene_all1_2 <- GeneA_news
+rm(GeneA_news)
+
+object3 <- load("Gene_all1_3.rda")
+Gene_all1_3 <- GeneA_news
+rm(GeneA_news)
+
+object4 <- load("Gene_all1_4.rda")
+Gene_all1_4 <- GeneA_news
+rm(GeneA_news)
+
+object5 <- load("Gene_all4_1.rda")
+Gene_all4_1 <- GeneA_news
+rm(GeneA_news)
+
+object6 <- load("Gene_all4_2.rda")
+Gene_all4_2 <- GeneA_news
+rm(GeneA_news)
+
+object7 <- load("Gene_all3.rda")
+Gene_all3 <- GeneB_news
+rm(GeneB_news)
+
+Gene_Nexis_combined <-rbind(Gene_all1_1, Gene_all1_2, Gene_all1_3, Gene_all1_4, Gene_all4_1, Gene_all4_2, Gene_all3)
+
+nrow(Gene_Nexis_combined)
+nrow(unique(Gene_Nexis_combined))
+unique(Gene_Nexis_combined)
+
+save(Gene_Nexis_combined, file = "C:\\Users\\Ahn Suhwoo\\Desktop\\Gene\\Read text\\Gene_Nexis_combined.rda")
+
+```
+
+
